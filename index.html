@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discord Multi-Poll Manager</title>
+<style>
+  :root { --bg: #1e1f22; --sidebar: #2b2d31; --card: #313338; --text: #dbdee1; --primary: #5865f2; --danger: #da373c; --success: #248046; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+  body { background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+
+  /* Sidebar (Danh sách Tab) */
+  .sidebar { width: 260px; background: var(--sidebar); display: flex; flex-direction: column; border-right: 1px solid #1e1f22; }
+  .sidebar-header { padding: 16px; font-weight: bold; font-size: 14px; text-transform: uppercase; color: #949ba4; border-bottom: 1px solid #1e1f22; display: flex; justify-content: space-between; align-items: center;}
+  .add-tab-btn { background: var(--success); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+  .tab-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .tab-item { padding: 10px 12px; margin-bottom: 4px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+  .tab-item:hover { background: #35373c; }
+  .tab-item.active { background: #404249; font-weight: bold; }
+  .tab-item .del-btn { background: transparent; color: #f23f43; border: none; font-size: 16px; cursor: pointer; opacity: 0; transition: 0.2s; }
+  .tab-item:hover .del-btn { opacity: 1; }
+
+  /* Main Content */
+  .main-content { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; align-items: center; }
+  .container { width: 100%; max-width: 600px; }
+  .hidden { display: none !important; }
+
+  .welcome-screen { text-align: center; margin-top: 100px; color: #949ba4; }
+  
+  .card { background: var(--card); padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+  .card h2 { font-size: 18px; margin-bottom: 16px; border-bottom: 1px solid #3f4147; padding-bottom: 10px; }
+
+  label { font-size: 13px; color: #b5bac1; margin-bottom: 6px; display: block; font-weight: bold; }
+  input[type="text"], input[type="password"], input[type="number"], select { width: 100%; padding: 10px; background: #1e1f22; border: 1px solid #1e1f22; border-radius: 6px; color: var(--text); margin-bottom: 16px; font-size: 15px; }
+  input:focus, select:focus { outline: none; border-color: var(--primary); }
+
+  .answer-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .answer-row input { margin-bottom: 0; flex: 1; }
+  .answer-row button { background: var(--danger); color: white; border: none; padding: 0 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+  
+  .btn-main { width: 100%; padding: 12px; border: none; border-radius: 6px; background: var(--primary); color: white; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+  .btn-main:hover { background: #4752c4; }
+  .btn-add { background: transparent; color: #00a8fc; border: none; font-size: 14px; cursor: pointer; font-weight: bold; margin-bottom: 16px; display: block; }
+  .btn-add:hover { text-decoration: underline; }
+
+  #logBox { background: #1e1f22; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 13px; max-height: 150px; overflow-y: auto; margin-top: 20px; color: #00ff00; }
+</style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>Kênh Webhook</span>
+      <button class="add-tab-btn" onclick="openConfigModal()">+</button>
+    </div>
+    <div class="tab-list" id="tabList"></div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+    
+    <!-- Màn hình chờ nếu chưa có tab -->
+    <div id="welcome" class="welcome-screen">
+      <h1>Chưa có Webhook nào!</h1>
+      <p style="margin-top:10px;">Bấm nút <b>+</b> ở góc trái trên cùng để thêm kênh Webhook mới.</p>
+    </div>
+
+    <!-- Khu vực tạo Poll -->
+    <div id="pollArea" class="container hidden">
+      <div class="card">
+        <h2>Tạo Bình Chọn (Poll)</h2>
+        <label>Tên Tab / Ghi chú (Chỉ hiển thị trên web)</label>
+        <input type="text" id="tabNameDisplay" disabled style="opacity: 0.6; cursor: not-allowed;" />
+
+        <label>Câu hỏi bình chọn</label>
+        <input type="text" id="pollQuestion" placeholder="Ví dụ: Tối nay ăn gì?" />
+
+        <label>Các đáp án (Tối đa 10)</label>
+        <div id="answersContainer"></div>
+        <button class="btn-add" onclick="addAnswerInput()">+ Thêm đáp án</button>
+
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1;">
+            <label>Thời gian (Giờ)</label>
+            <input type="number" id="pollDuration" value="24" min="1" max="768" />
+          </div>
+          <div style="flex: 1;">
+            <label>Kiểu chọn</label>
+            <select id="pollMultiSelect">
+              <option value="false">Chọn 1 đáp án</option>
+              <option value="true">Chọn nhiều đáp án</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn-main" onclick="sendPoll()">🚀 Gửi Poll Lên Discord</button>
+      </div>
+      
+      <div id="logBox">Hệ thống sẵn sàng...</div>
+    </div>
+
+  </div>
+
+  <!-- MODAL TẠO TAB MỚI (Ẩn/Hiện bằng JS) -->
+  <div id="configModal" style="position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:none; justify-content:center; align-items:center; z-index: 999;">
+    <div class="card" style="width: 400px;">
+      <h2>Thêm Webhook Mới</h2>
+      <label>Tên gợi nhớ (VD: Server Của Tôi)</label>
+      <input type="text" id="newTabName" placeholder="Nhập tên..." />
+      
+      <label>Discord Webhook URL</label>
+      <input type="password" id="newTabUrl" placeholder="https://discord.com/api/webhooks/..." />
+      
+      <div style="display: flex; gap: 10px; margin-top: 16px;">
+        <button class="btn-main" style="background: #3f4147;" onclick="closeConfigModal()">Hủy</button>
+        <button class="btn-main" onclick="saveNewTab()">Lưu Webhook</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  let webhooks = JSON.parse(localStorage.getItem('discord_multi_polls')) || [];
+  let activeTabId = null;
+
+  // === KHỞI TẠO & RENDER ===
+  function init() {
+    renderTabs();
+    if (webhooks.length > 0) {
+      selectTab(webhooks[0].id);
+    } else {
+      showWelcome();
+    }
+  }
+
+  function renderTabs() {
+    const list = $('tabList');
+    list.innerHTML = '';
+    webhooks.forEach(wh => {
+      const div = document.createElement('div');
+      div.className = `tab-item ${wh.id === activeTabId ? 'active' : ''}`;
+      div.onclick = (e) => {
+        if(e.target.classList.contains('del-btn')) return; // Tránh click nhầm nút xóa
+        selectTab(wh.id);
+      };
+      div.innerHTML = `
+        <span># ${wh.name}</span>
+        <button class="del-btn" onclick="deleteTab('${wh.id}')">✖</button>
+      `;
+      list.appendChild(div);
+    });
+  }
+
+  function showWelcome() {
+    $('welcome').classList.remove('hidden');
+    $('pollArea').classList.add('hidden');
+    activeTabId = null;
+    renderTabs();
+  }
+
+  function selectTab(id) {
+    activeTabId = id;
+    const wh = webhooks.find(w => w.id === id);
+    if (!wh) return;
+
+    $('welcome').classList.add('hidden');
+    $('pollArea').classList.remove('hidden');
+    $('tabNameDisplay').value = wh.name;
+    
+    // Reset form
+    $('pollQuestion').value = '';
+    $('answersContainer').innerHTML = '';
+    addAnswerInput();
+    addAnswerInput(); // Tạo sẵn 2 ô
+    $('logBox').textContent = `Đang chọn: ${wh.name}\nSẵn sàng tạo Poll...`;
+
+    renderTabs();
+  }
+
+  // === QUẢN LÝ TAB ===
+  function openConfigModal() {
+    $('newTabName').value = '';
+    $('newTabUrl').value = '';
+    $('configModal').style.display = 'flex';
+  }
+
+  function closeConfigModal() {
+    $('configModal').style.display = 'none';
+  }
+
+  function saveNewTab() {
+    const name = $('newTabName').value.trim();
+    const url = $('newTabUrl').value.trim();
+
+    if (!name) return alert('Vui lòng nhập tên gợi nhớ!');
+    if (!url.startsWith('https://discord.com/api/webhooks/')) return alert('Link Webhook không hợp lệ!');
+
+    const newWh = { id: Date.now().toString(), name, url };
+    webhooks.push(newWh);
+    saveData();
+    closeConfigModal();
+    selectTab(newWh.id);
+  }
+
+  function deleteTab(id) {
+    if (!confirm('Bạn có chắc muốn xóa Webhook này khỏi danh sách?')) return;
+    webhooks = webhooks.filter(w => w.id !== id);
+    saveData();
+    if (activeTabId === id) {
+      if (webhooks.length > 0) selectTab(webhooks[0].id);
+      else showWelcome();
+    }
+  }
+
+  function saveData() {
+    localStorage.setItem('discord_multi_polls', JSON.stringify(webhooks));
+    renderTabs();
+  }
+
+  // === XỬ LÝ POLL ===
+  function addAnswerInput() {
+    const container = $('answersContainer');
+    if (container.children.length >= 10) return alert('Tối đa 10 đáp án thôi!');
+    
+    const div = document.createElement('div');
+    div.className = 'answer-row';
+    div.innerHTML = `
+      <input type="text" class="answer-input" placeholder="Nhập đáp án..." />
+      <button onclick="this.parentElement.remove()">X</button>
+    `;
+    container.appendChild(div);
+  }
+
+  async function sendPoll() {
+    const wh = webhooks.find(w => w.id === activeTabId);
+    if (!wh) return;
+
+    const question = $('pollQuestion').value.trim();
+    if (!question) return alert('Chưa nhập câu hỏi!');
+
+    const inputs = document.querySelectorAll('.answer-input');
+    const answers = Array.from(inputs)
+      .map(i => i.value.trim())
+      .filter(t => t !== '')
+      .map(t => ({ poll_media: { text: t } }));
+
+    if (answers.length < 2) return alert('Cần ít nhất 2 đáp án!');
+
+    const payload = {
+      poll: {
+        question: { text: question },
+        answers: answers,
+        duration: Math.min(768, Math.max(1, parseInt($('pollDuration').value) || 24)),
+        allow_multiselect: $('pollMultiSelect').value === 'true',
+        layout_type: 1
+      }
+    };
+
+    try {
+      $('logBox').textContent = '⏳ Đang gửi Poll...';
+      const res = await fetch(wh.url + '?wait=true', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        $('logBox').textContent = `✅ [${new Date().toLocaleTimeString()}] Tạo Poll thành công!\nCâu hỏi: ${question}`;
+      } else {
+        const err = await res.text();
+        $('logBox').textContent = `❌ Lỗi HTTP ${res.status}\n${err}`;
+      }
+    } catch (e) {
+      $('logBox').textContent = `❌ Lỗi mạng: ${e.message}`;
+    }
+  }
+
+  // Chạy khởi tạo
+  init();
+</script>
+
+</body>
+        </html>
